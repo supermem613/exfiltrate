@@ -43,7 +43,7 @@
                 {
                     "id": "exfiltrate-panel",
                     "title": "Exfiltrate",
-                    "icon": "images/icon.svg"
+                    "icon": "images/sidebar-icon.svg"
                 }
             ]
         },

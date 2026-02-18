@@ -1,6 +1,39 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
-  <!-- Download tray: horizontal base bar -->
-  <path d="M1 11.5a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-2z"/>
-  <!-- Arrow shaft pointing down -->
-  <path d="M7.5 1.5a.5.5 0 0 1 1 0v6.793l2.146-2.147a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 1 1 .708-.708L7.5 8.293V1.5z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Background -->
+  <rect width="128" height="128" rx="18" fill="#0d1117"/>
+
+  <!-- Remote server rack (left side) -->
+  <rect x="10" y="22" width="46" height="11" rx="3" fill="#1f6feb" stroke="#388bfd" stroke-width="1"/>
+  <circle cx="50" cy="27.5" r="2.5" fill="#3fb950"/>
+  <rect x="10" y="37" width="46" height="11" rx="3" fill="#1f6feb" stroke="#388bfd" stroke-width="1"/>
+  <circle cx="50" cy="42.5" r="2.5" fill="#3fb950"/>
+  <rect x="10" y="52" width="46" height="11" rx="3" fill="#1f6feb" stroke="#388bfd" stroke-width="1"/>
+  <circle cx="50" cy="57.5" r="2.5" fill="#f85149"/>
+
+  <!-- Connection arrow -->
+  <path d="M62 44 L80 44" stroke="#58a6ff" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M74 38 L80 44 L74 50" fill="none" stroke="#58a6ff" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Local file (right side) -->
+  <rect x="84" y="28" width="34" height="44" rx="3" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <!-- Folded corner -->
+  <path d="M105 28 L105 43 L118 43" fill="none" stroke="#30363d" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M105 28 L118 43 L118 72 L84 72 L84 28 Z" fill="#21262d" stroke="#30363d" stroke-width="1.5"/>
+  <!-- Text lines in file -->
+  <line x1="90" y1="52" x2="112" y2="52" stroke="#58a6ff" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="90" y1="58" x2="112" y2="58" stroke="#58a6ff" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="90" y1="64" x2="102" y2="64" stroke="#58a6ff" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- Bottom tray / destination bar -->
+  <rect x="10" y="82" width="108" height="12" rx="3" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+
+  <!-- Arrow pointing down into tray -->
+  <line x1="64" y1="75" x2="64" y2="80" stroke="#58a6ff" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M58 77 L64 83 L70 77" fill="none" stroke="#58a6ff" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Label -->
+  <text x="64" y="110" font-family="'Courier New',Courier,monospace" font-size="11"
+        font-weight="bold" text-anchor="middle" fill="#58a6ff" letter-spacing="0.5">exfiltrate</text>
 </svg>
