@@ -2,7 +2,7 @@
     "name": "exfiltrate",
     "displayName": "Exfiltrate",
     "description": "Copy the current open file from a remote VS Code session (WSL, Dev Container, SSH, Codespaces) to your local filesystem with an intuitive sidebar UI",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "publisher": "supermem613",
     "license": "MIT",
     "icon": "images/icon.png",

@@ -116,18 +116,43 @@ export class CopyPanelProvider implements vscode.WebviewViewProvider {
         const isRemoteLocal = detectIsRemoteLocalMachine(remoteName, os.hostname());
         const useLocalScheme = shouldUseVscodeLocalScheme(remoteName, isRemoteLocal);
 
-        // When running in a true remote context, open the browse dialog on the
-        // local host by anchoring the default URI to the vscode-local: scheme.
-        const defaultUri = useLocalScheme
-            ? vscode.Uri.from({ scheme: 'vscode-local', path: '/' })
-            : vscode.Uri.file(os.homedir());
+        this._logger.info('Opening folder browser', { remoteName, useLocalScheme });
 
-        this._logger.info('Opening folder browser', {
-            remoteName,
-            useLocalScheme,
-            defaultUri: defaultUri.toString(),
+        const selected = useLocalScheme
+            ? await this._browseViaInputBox()
+            : await this._browseViaDialog();
+
+        if (selected) {
+            this._logger.info('Folder selected', { path: selected });
+            this._view?.webview.postMessage({ type: 'browseResult', path: selected });
+            await vscode.workspace
+                .getConfiguration('exfiltrate')
+                .update('destinationPath', selected, vscode.ConfigurationTarget.Global);
+        }
+    }
+
+    /**
+     * In a true remote context (Codespaces, ssh-remote, etc.) showOpenDialog
+     * cannot browse the local filesystem — it throws "File system provider for
+     * vscode-local:/ is not available". Fall back to a typed input box instead.
+     */
+    private async _browseViaInputBox(): Promise<string | undefined> {
+        const saved = vscode.workspace
+            .getConfiguration('exfiltrate')
+            .get<string>('destinationPath', '');
+        return vscode.window.showInputBox({
+            title: 'Exfiltrate: Set Destination Folder',
+            prompt: 'Enter the full path to a folder on your local machine',
+            value: saved,
+            ignoreFocusOut: true,
         });
+    }
 
+    private async _browseViaDialog(): Promise<string | undefined> {
+        const saved = vscode.workspace
+            .getConfiguration('exfiltrate')
+            .get<string>('destinationPath', '');
+        const defaultUri = saved ? vscode.Uri.file(saved) : vscode.Uri.file(os.homedir());
         const result = await vscode.window.showOpenDialog({
             defaultUri,
             canSelectFolders: true,
@@ -136,17 +161,7 @@ export class CopyPanelProvider implements vscode.WebviewViewProvider {
             openLabel: 'Select Destination Folder',
             title: 'Exfiltrate: Select Destination Folder',
         });
-
-        if (result?.[0]) {
-            const selected = result[0].fsPath;
-            this._logger.info('Folder selected', { path: selected });
-            this._view?.webview.postMessage({ type: 'browseResult', path: selected });
-            // Persist immediately so the setting is always in sync with what's
-            // shown in the input box.
-            await vscode.workspace
-                .getConfiguration('exfiltrate')
-                .update('destinationPath', selected, vscode.ConfigurationTarget.Global);
-        }
+        return result?.[0]?.fsPath;
     }
 
     private async _handleCopyFromWebview(destination: string): Promise<void> {
@@ -183,15 +198,50 @@ export class CopyPanelProvider implements vscode.WebviewViewProvider {
             throw new Error('Destination folder is empty. Set a path first.');
         }
 
+        // Log full environment for remote debugging
+        const remoteName = vscode.env.remoteName;
+        const hostname = os.hostname();
+        const platform = os.platform();
+        const homedir = os.homedir();
+        const isRemoteLocal = detectIsRemoteLocalMachine(remoteName, hostname);
+        const useLocalScheme = shouldUseVscodeLocalScheme(remoteName, isRemoteLocal);
+
+        this._logger.info('Copy environment', {
+            remoteName: remoteName ?? '(undefined)',
+            hostname,
+            platform,
+            homedir,
+            isRemoteLocal,
+            useLocalScheme,
+            destDir,
+            filename,
+        });
+
         const destUri = this._buildDestUri(destDir, filename);
 
         this._logger.info('Copying file', {
             source: sourceUri.toString(),
+            sourceScheme: sourceUri.scheme,
             destination: destUri.toString(),
+            destScheme: destUri.scheme,
+            destPath: destUri.path,
         });
 
         // Check for overwrite
-        const exists = await this._fileExists(destUri);
+        this._logger.info('Checking if destination exists', { uri: destUri.toString() });
+        let exists = false;
+        try {
+            await vscode.workspace.fs.stat(destUri);
+            exists = true;
+            this._logger.info('Destination exists');
+        } catch (statErr: any) {
+            this._logger.info('Stat result (expected miss = ok)', {
+                code: statErr?.code,
+                name: statErr?.name,
+                message: statErr?.message,
+            });
+        }
+
         if (exists) {
             const answer = await vscode.window.showWarningMessage(
                 `"${filename}" already exists in the destination folder. Overwrite?`,
@@ -208,22 +258,51 @@ export class CopyPanelProvider implements vscode.WebviewViewProvider {
         let content: Uint8Array;
         try {
             content = await vscode.workspace.fs.readFile(sourceUri);
+            this._logger.info('Source read', { bytes: content.byteLength });
         } catch (err) {
             this._logger.error('Failed to read source file', err);
             throw new Error(`Cannot read source file: ${err instanceof Error ? err.message : String(err)}`);
         }
 
         // Write to destination
+        this._logger.info('Writing to destination', { uri: destUri.toString() });
         try {
             await vscode.workspace.fs.writeFile(destUri, content);
-        } catch (err) {
-            this._logger.error('Failed to write destination file', err);
-            throw new Error(`Cannot write destination: ${err instanceof Error ? err.message : String(err)}`);
+            this._logger.info('Write succeeded');
+        } catch (err: any) {
+            this._logger.error('Write failed', {
+                code: err?.code,
+                name: err?.name,
+                message: err?.message,
+                uri: destUri.toString(),
+            });
+            // When vscode-local: is not registered (e.g. some Codespaces configs),
+            // fall back to the plain file: scheme, mirroring PatchItUp's pattern.
+            if (useLocalScheme && (err.code === 'ENOPRO' || err.message?.includes('No file system provider'))) {
+                const fallbackUri = vscode.Uri.joinPath(vscode.Uri.file(destDir), filename);
+                this._logger.warn('vscode-local: unavailable, falling back to file: scheme', {
+                    fallbackUri: fallbackUri.toString(),
+                });
+                try {
+                    await vscode.workspace.fs.writeFile(fallbackUri, content);
+                    this._logger.info('Fallback write succeeded', { uri: fallbackUri.toString() });
+                } catch (fallbackErr: any) {
+                    this._logger.error('Fallback write also failed', {
+                        code: fallbackErr?.code,
+                        name: fallbackErr?.name,
+                        message: fallbackErr?.message,
+                        uri: fallbackUri.toString(),
+                    });
+                    throw new Error(`Cannot write destination: ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`);
+                }
+            } else {
+                throw new Error(`Cannot write destination: ${err instanceof Error ? err.message : String(err)}`);
+            }
         }
 
         this._logger.info('File copied successfully', {
-            source: sourceUri.fsPath,
-            dest: destUri.fsPath,
+            source: sourceUri.toString(),
+            dest: destUri.toString(),
             bytes: content.byteLength,
         });
 
@@ -240,10 +319,24 @@ export class CopyPanelProvider implements vscode.WebviewViewProvider {
         const isRemoteLocal = detectIsRemoteLocalMachine(remoteName, os.hostname());
         const useLocalScheme = shouldUseVscodeLocalScheme(remoteName, isRemoteLocal);
 
-        const baseUri = useLocalScheme
-            ? vscode.Uri.file(destDir).with({ scheme: 'vscode-local' })
-            : vscode.Uri.file(destDir);
+        // Do NOT use vscode.Uri.file(destDir).with({scheme:'vscode-local'}) here.
+        // When the extension host is Linux (Codespaces, ssh-remote) and the local
+        // machine is Windows, vscode.Uri.file('C:/temp') encodes the colon:
+        //   vscode-local:/c%3A/temp   ← wrong (ENOPRO / provider-not-found)
+        //   vscode-local:///c:/temp   ← correct
+        const vscodeFileUri = vscode.Uri.file(destDir);
+        const naiveWithUri = vscodeFileUri.with({ scheme: 'vscode-local' });
+        const correctUri = toVscodeLocalUri(destDir);
 
+        this._logger.info('_buildDestUri', {
+            destDir,
+            useLocalScheme,
+            'vscode.Uri.file()': vscodeFileUri.toString(),
+            'naive .with(vscode-local)': naiveWithUri.toString(),
+            'toVscodeLocalUri()': correctUri.toString(),
+        });
+
+        const baseUri = useLocalScheme ? correctUri : vscodeFileUri;
         return vscode.Uri.joinPath(baseUri, filename);
     }
 
@@ -504,6 +597,27 @@ export class CopyPanelProvider implements vscode.WebviewViewProvider {
 </body>
 </html>`;
     }
+}
+
+/**
+ * Constructs a `vscode-local:` URI for a local filesystem path without going
+ * through `vscode.Uri.file()`, which interprets the path with the REMOTE OS
+ * conventions. When the extension host is Linux and the destination is a
+ * Windows absolute path (e.g. "C:\temp"), `vscode.Uri.file` encodes the colon:
+ *   vscode-local:/c%3A/temp   ← wrong – "No file system provider" error
+ *   vscode-local:///c:/temp   ← correct
+ */
+function toVscodeLocalUri(fsPath: string): vscode.Uri {
+    const normalized = fsPath.replace(/\\/g, '/');
+    const winDriveMatch = normalized.match(/^([a-zA-Z]):\/?(.*)$/);
+    if (winDriveMatch) {
+        const drive = winDriveMatch[1].toLowerCase();
+        const rest = winDriveMatch[2];
+        const uri = vscode.Uri.from({ scheme: 'vscode-local', path: `/${drive}:/${rest}` });
+        // logged by caller (_buildDestUri)
+        return uri;
+    }
+    return vscode.Uri.from({ scheme: 'vscode-local', path: normalized });
 }
 
 function getNonce(): string {
