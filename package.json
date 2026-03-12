@@ -2,7 +2,7 @@
     "name": "exfiltrate",
     "displayName": "Exfiltrate",
     "description": "Copy the current open file from a remote VS Code session (WSL, Dev Container, SSH, Codespaces) to your local filesystem with an intuitive sidebar UI",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "publisher": "supermem613",
     "license": "MIT",
     "icon": "images/icon.png",
@@ -79,11 +79,11 @@
         "lint": "eslint src --ext ts"
     },
     "devDependencies": {
-        "@types/vscode": "^1.85.0",
         "@types/node": "18.x",
-        "@typescript-eslint/eslint-plugin": "^6.13.0",
-        "@typescript-eslint/parser": "^6.13.0",
-        "eslint": "^8.54.0",
+        "@types/vscode": "^1.85.0",
+        "@typescript-eslint/eslint-plugin": "^8.57.0",
+        "@typescript-eslint/parser": "^8.57.0",
+        "eslint": "^8.57.1",
         "prettier": "^3.5.1",
         "typescript": "^5.3.2"
     }
